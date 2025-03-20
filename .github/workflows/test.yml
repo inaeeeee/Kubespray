@@ -22,7 +22,7 @@ jobs:
       - name: Configure PostgreSQL Authentication
         run: |
           echo "🔑 Setting up .pgpass for PostgreSQL authentication..."
-          echo "192.168.60.67:5000:solmakasedb:postgres:qaz123" > ~/.pgpass
+          echo "192.168.60.67:5000:solmakasedb:postgres:your_postgres_password" > ~/.pgpass
           chmod 600 ~/.pgpass
 
       - name: Checkout Repository
@@ -46,14 +46,20 @@ jobs:
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
 
           echo "📌 Service: $SERVICE_NAME"
-          echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
+          echo "📌 Deploy Script Path on DB Server: $DEPLOY_SCRIPT"
 
           YAML_FILE="/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml"
 
+          echo "🚀 Fetching deployment script and YAML from DB server (192.168.60.67)..."
+          mkdir -p /tmp/lb-web
+
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:$YAML_FILE /tmp/lb-web/deployment.yaml
+
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "mkdir -p /tmp/lb-web"
-          scp -o StrictHostKeyChecking=no "$DEPLOY_SCRIPT" devops@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no "$YAML_FILE" devops@192.168.30.32:/tmp/lb-web/deployment.yaml"
+          scp -o StrictHostKeyChecking=no /tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no /tmp/lb-web/deployment.yaml devops@192.168.30.32:/tmp/lb-web/deployment.yaml"
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
