@@ -1,11 +1,11 @@
 name: Deploy lb-web on External K8s Server (Local with SSH)
 
 on:
-  workflow_dispatch:  # 수동 실행 가능하도록 설정
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: self-hosted  # GitHub Actions 실행 서버 (192.168.179.134)
+    runs-on: self-hosted
 
     steps:
       - name: Install PostgreSQL Client on CentOS
@@ -19,6 +19,12 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
+      - name: Configure PostgreSQL Authentication
+        run: |
+          echo "🔑 Setting up .pgpass for PostgreSQL authentication..."
+          echo "192.168.60.67:5000:solmakasedb:postgres:qaz123" > ~/.pgpass
+          chmod 600 ~/.pgpass
+
       - name: Checkout Repository
         uses: actions/checkout@v3
 
@@ -26,7 +32,6 @@ jobs:
         run: |
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy..."
 
-          # PostgreSQL 정보 조회
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -t -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
 
@@ -37,23 +42,20 @@ jobs:
 
           echo "✅ Found lb-web service info: $SERVICE_INFO"
 
-          # 데이터 파싱
           SERVICE_NAME=$(echo "$SERVICE_INFO" | awk -F '|' '{print $1}' | xargs)
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
 
-          echo "----------------------------------------"
           echo "📌 Service: $SERVICE_NAME"
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-          # YAML 파일 경로 정의
           YAML_FILE="/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml"
 
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
-          ssh -o StrictHostKeyChecking=no root@192.168.30.32 "mkdir -p /tmp/lb-web"
-          scp -o StrictHostKeyChecking=no "$DEPLOY_SCRIPT" root@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no "$YAML_FILE" root@192.168.30.32:/tmp/lb-web/deployment.yaml"
+          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "mkdir -p /tmp/lb-web"
+          scp -o StrictHostKeyChecking=no "$DEPLOY_SCRIPT" devops@192.168.30.32:/tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no "$YAML_FILE" devops@192.168.30.32:/tmp/lb-web/deployment.yaml"
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
           echo "🚀 Executing deployment script on Kubernetes master server (192.168.30.32)..."
-          ssh -o StrictHostKeyChecking=no root@192.168.30.32 "chmod +x /tmp/lb-web/deploy.sh && /tmp/lb-web/deploy.sh"
+          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/lb-web/deploy.sh && /tmp/lb-web/deploy.sh"
