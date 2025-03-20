@@ -5,9 +5,20 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted  # GitHub Actions 실행 서버
+    runs-on: self-hosted  # GitHub Actions 실행 서버 (192.168.179.134)
 
     steps:
+      - name: Install PostgreSQL Client on CentOS
+        run: |
+          echo "🔧 Checking if PostgreSQL Client (psql) is installed..."
+          if ! command -v psql &> /dev/null
+          then
+            echo "⚠️ PostgreSQL Client not found. Installing..."
+            sudo yum install -y postgresql
+          else
+            echo "✅ PostgreSQL Client is already installed."
+          fi
+
       - name: Checkout Repository
         uses: actions/checkout@v3
 
@@ -15,20 +26,18 @@ jobs:
         run: |
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy..."
 
-          # PostgreSQL 정보 조회 (HAProxy 경유하여 클러스터의 Primary에서 가져옴)
+          # PostgreSQL 정보 조회
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -t -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
 
-          # 데이터가 비어있다면 오류 처리
           if [[ -z "$SERVICE_INFO" ]]; then
             echo "❌ No deployment information found for lb-web!"
             exit 1
           fi
 
-          echo "✅ Found lb-web service info:"
-          echo "$SERVICE_INFO"
+          echo "✅ Found lb-web service info: $SERVICE_INFO"
 
-          # 데이터 파싱 (배포 스크립트 경로 추출)
+          # 데이터 파싱
           SERVICE_NAME=$(echo "$SERVICE_INFO" | awk -F '|' '{print $1}' | xargs)
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
 
@@ -42,7 +51,7 @@ jobs:
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
           ssh -o StrictHostKeyChecking=no root@192.168.30.32 "mkdir -p /tmp/lb-web"
           scp -o StrictHostKeyChecking=no "$DEPLOY_SCRIPT" root@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no "$YAML_FILE" root@192.168.30.32:/tmp/lb-web/deployment.yaml
+          scp -o StrictHostKeyChecking=no "$YAML_FILE" root@192.168.30.32:/tmp/lb-web/deployment.yaml"
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
