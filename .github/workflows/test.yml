@@ -19,18 +19,15 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
-      - name: Configure PostgreSQL Authentication
-        run: |
-          echo "🔑 Setting up .pgpass for PostgreSQL authentication..."
-          echo "192.168.60.67:5000:solmakasedb:postgres:your_postgres_password" > ~/.pgpass
-          chmod 600 ~/.pgpass
-
       - name: Checkout Repository
         uses: actions/checkout@v3
 
       - name: Fetch lb-web Deployment Info from PostgreSQL via HAProxy
         run: |
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy..."
+          
+          # PostgreSQL 비밀번호 하드코딩
+          export PGPASSWORD="qaz123"
 
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -t -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
