@@ -68,7 +68,8 @@ jobs:
           echo "🗄 Fetching VM Information from Kubernetes Master and Storing in PostgreSQL..."
 
           # Kubernetes Master에서 실행하여 VM 정보를 가져오기
-          POD_INFO=$(ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.podIP}{"\n"}{end}'")
+          POD_INFO=$(ssh -o StrictHostKeyChecking=no devops@192.168.30.32 \
+            "kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{\"|\"}{.status.podIP}{\"\n\"}{end}'" | tr -d '\r')
 
           if [[ -z "$POD_INFO" ]]; then
               echo "❌ ERROR: No running pods found!"
@@ -91,9 +92,3 @@ jobs:
           done <<< "$POD_INFO"
 
           echo "✅ VM Information Successfully Stored in PostgreSQL"
-
-      - name: Verify Stored VM Information
-        run: |
-          echo "🔍 Verifying stored VM information in PostgreSQL..."
-          psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -c "SELECT * FROM VM;"
-          echo "✅ Verification Completed"
