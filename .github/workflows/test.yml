@@ -19,6 +19,12 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
+      - name: Setup PostgreSQL Authentication (Avoid Password Prompts)
+        run: |
+          echo "🔧 Configuring PostgreSQL authentication..."
+          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass
+          chmod 600 ~/.pgpass
+
       - name: Checkout Repository
         uses: actions/checkout@v3
 
@@ -27,7 +33,7 @@ jobs:
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy (Slave)..."
 
           # PostgreSQL 비밀번호 없이 HAProxy(5001)에서 데이터 조회
-          SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -c \
+          SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
 
           if [[ -z "$SERVICE_INFO" ]]; then
@@ -70,8 +76,14 @@ jobs:
           scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
           scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml /tmp/lb-web/deployment.yaml
 
+      - name: Fix Permissions on Kubernetes Master Server
+        run: |
+          echo "🔧 Ensuring correct permissions for /tmp/lb-web on Kubernetes master server..."
+          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/lb-web && sudo chown -R devops:devops /tmp/lb-web"
+
+      - name: Copy Deployment Files to Kubernetes Master Server
+        run: |
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
-          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "mkdir -p /tmp/lb-web"
           scp -o StrictHostKeyChecking=no /tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
           scp -o StrictHostKeyChecking=no /tmp/lb-web/deployment.yaml devops@192.168.30.32:/tmp/lb-web/deployment.yaml
 
