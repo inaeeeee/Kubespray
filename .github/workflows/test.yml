@@ -22,14 +22,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Fetch lb-web Deployment Info from PostgreSQL via HAProxy
+      - name: Fetch lb-web Deployment Info from PostgreSQL via HAProxy (Slave)
         run: |
-          echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy..."
-          
-          # PostgreSQL 비밀번호 하드코딩
-          export PGPASSWORD="qaz123"
+          echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy (Slave)..."
 
-          SERVICE_INFO=$(psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -t -c \
+          # PostgreSQL 비밀번호 없이 HAProxy(5001)에서 데이터 조회
+          SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
 
           if [[ -z "$SERVICE_INFO" ]]; then
@@ -43,15 +41,26 @@ jobs:
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
 
           echo "📌 Service: $SERVICE_NAME"
-          echo "📌 Deploy Script Path on DB Server: $DEPLOY_SCRIPT"
+          echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-          YAML_FILE="/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml"
+          # 어떤 서버에서 배포 스크립트를 가져와야 하는지 결정
+          if [[ "$DEPLOY_SCRIPT" == *"postgre01"* ]]; then
+            DB_SERVER="192.168.60.64"
+          elif [[ "$DEPLOY_SCRIPT" == *"postgre02"* ]]; then
+            DB_SERVER="192.168.60.65"
+          elif [[ "$DEPLOY_SCRIPT" == *"postgre03"* ]]; then
+            DB_SERVER="192.168.60.66"
+          else
+            echo "❌ ERROR: Unknown DB server for deploy script"
+            exit 1
+          fi
 
-          echo "🚀 Fetching deployment script and YAML from DB server (192.168.60.67)..."
+          echo "🚀 Fetching deployment script and YAML from DB server ($DB_SERVER)..."
           mkdir -p /tmp/lb-web
 
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:$YAML_FILE /tmp/lb-web/deployment.yaml
+          # 배포 스크립트 및 YAML을 해당 DB 서버에서 가져오기 (postgres 사용자로 SSH)
+          scp -o StrictHostKeyChecking=no postgres@$DB_SERVER:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@$DB_SERVER:/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml /tmp/lb-web/deployment.yaml
 
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "mkdir -p /tmp/lb-web"
