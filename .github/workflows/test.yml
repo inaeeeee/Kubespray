@@ -1,7 +1,7 @@
 name: Deploy lb-web on External K8s Server (Local with SSH)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 버튼 클릭 시 실행
 
 jobs:
   deploy:
@@ -22,7 +22,8 @@ jobs:
       - name: Setup PostgreSQL Authentication (Avoid Password Prompts)
         run: |
           echo "🔧 Configuring PostgreSQL authentication..."
-          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass
+          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass  # ✅ Slave (SELECT)
+          echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass  # ✅ Master (INSERT, UPDATE)
           chmod 600 ~/.pgpass
 
       - name: Checkout Repository
@@ -32,7 +33,6 @@ jobs:
         run: |
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy (Slave)..."
 
-          # PostgreSQL 비밀번호 없이 HAProxy(5001)에서 데이터 조회
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
             "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
 
@@ -47,34 +47,40 @@ jobs:
 
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-          # 사용할 수 있는 DB 서버 목록
-          DB_SERVERS=("192.168.60.64" "192.168.60.65" "192.168.60.66")
-          SELECTED_DB_SERVER=""
+      - name: Deploy VM to Kubernetes
+        run: |
+          echo "🚀 Deploying VM in Kubernetes..."
+          kubectl apply -f /tmp/lb-web/deployment.yaml
+          sleep 5  # Kubernetes가 Pod를 생성할 시간을 줌
+          echo "✅ Kubernetes Deployment Completed"
 
-          echo "🔍 Finding the correct DB server where the deployment script exists..."
+      - name: Fetch VM Information from Kubernetes
+        id: fetch_vms
+        run: |
+          echo "🔍 Fetching VM information..."
+          POD_INFO=$(kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.podIP}{"\n"}{end}')
+          echo "POD_INFO=$POD_INFO" >> $GITHUB_ENV
+          echo "✅ VM Information Fetched"
 
-          # 실제로 파일이 존재하는 DB 서버 찾기
-          for DB_SERVER in "${DB_SERVERS[@]}"; do
-              echo "🔍 Checking on $DB_SERVER..."
-              if ssh -o StrictHostKeyChecking=no postgres@$DB_SERVER "test -f $DEPLOY_SCRIPT"; then
-                  SELECTED_DB_SERVER=$DB_SERVER
-                  echo "✅ Deployment script found on $DB_SERVER"
-                  break
+      - name: Store VM Information in PostgreSQL (Master)
+        run: |
+          echo "🗄 Storing VM Information in PostgreSQL (Master)..."
+
+          while IFS="|" read -r HOSTNAME IP_ADDRESS; do
+              if [[ -n "$HOSTNAME" && -n "$IP_ADDRESS" ]]; then
+                  STATUS="running"
+                  echo "📌 Saving VM: $HOSTNAME ($IP_ADDRESS)"
+
+                  # Master(5000)로 데이터 저장
+                  psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -c \
+                  "INSERT INTO VM (workspace_id, hostname, ip_address, status)
+                   VALUES (1, '$HOSTNAME', '$IP_ADDRESS', 'running')
+                   ON CONFLICT (hostname) 
+                   DO UPDATE SET ip_address = EXCLUDED.ip_address, status = 'running';"
               fi
-          done
+          done <<< "$POD_INFO"
 
-          # DB 서버를 찾지 못하면 오류 발생
-          if [[ -z "$SELECTED_DB_SERVER" ]]; then
-              echo "❌ ERROR: No DB server contains the deployment script!"
-              exit 1
-          fi
-
-          echo "🚀 Fetching deployment script from DB server ($SELECTED_DB_SERVER)..."
-          mkdir -p /tmp/lb-web
-
-          # 배포 스크립트 및 YAML을 해당 DB 서버에서 가져오기
-          scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml /tmp/lb-web/deployment.yaml
+          echo "✅ VM Information Stored in PostgreSQL"
 
       - name: Fix Permissions on Kubernetes Master Server
         run: |
