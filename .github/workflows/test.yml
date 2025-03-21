@@ -37,35 +37,43 @@ jobs:
 
           echo "✅ Found lb-web service info: $SERVICE_INFO"
 
-          SERVICE_NAME=$(echo "$SERVICE_INFO" | awk -F '|' '{print $1}' | xargs)
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
 
-          echo "📌 Service: $SERVICE_NAME"
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-          # 어떤 서버에서 배포 스크립트를 가져와야 하는지 결정
-          if [[ "$DEPLOY_SCRIPT" == *"postgre01"* ]]; then
-            DB_SERVER="192.168.60.64"
-          elif [[ "$DEPLOY_SCRIPT" == *"postgre02"* ]]; then
-            DB_SERVER="192.168.60.65"
-          elif [[ "$DEPLOY_SCRIPT" == *"postgre03"* ]]; then
-            DB_SERVER="192.168.60.66"
-          else
-            echo "❌ ERROR: Unknown DB server for deploy script"
-            exit 1
+          # 사용할 수 있는 DB 서버 목록
+          DB_SERVERS=("192.168.60.64" "192.168.60.65" "192.168.60.66")
+          SELECTED_DB_SERVER=""
+
+          echo "🔍 Finding the correct DB server where the deployment script exists..."
+
+          # 실제로 파일이 존재하는 DB 서버 찾기
+          for DB_SERVER in "${DB_SERVERS[@]}"; do
+              echo "🔍 Checking on $DB_SERVER..."
+              if ssh -o StrictHostKeyChecking=no postgres@$DB_SERVER "test -f $DEPLOY_SCRIPT"; then
+                  SELECTED_DB_SERVER=$DB_SERVER
+                  echo "✅ Deployment script found on $DB_SERVER"
+                  break
+              fi
+          done
+
+          # DB 서버를 찾지 못하면 오류 발생
+          if [[ -z "$SELECTED_DB_SERVER" ]]; then
+              echo "❌ ERROR: No DB server contains the deployment script!"
+              exit 1
           fi
 
-          echo "🚀 Fetching deployment script and YAML from DB server ($DB_SERVER)..."
+          echo "🚀 Fetching deployment script from DB server ($SELECTED_DB_SERVER)..."
           mkdir -p /tmp/lb-web
 
-          # 배포 스크립트 및 YAML을 해당 DB 서버에서 가져오기 (postgres 사용자로 SSH)
-          scp -o StrictHostKeyChecking=no postgres@$DB_SERVER:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@$DB_SERVER:/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml /tmp/lb-web/deployment.yaml
+          # 배포 스크립트 및 YAML을 해당 DB 서버에서 가져오기
+          scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:$DEPLOY_SCRIPT /tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@$SELECTED_DB_SERVER:/var/lib/pgsql/data/service_templates/lb_web/yaml/deployment.yaml /tmp/lb-web/deployment.yaml
 
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "mkdir -p /tmp/lb-web"
           scp -o StrictHostKeyChecking=no /tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no /tmp/lb-web/deployment.yaml devops@192.168.30.32:/tmp/lb-web/deployment.yaml"
+          scp -o StrictHostKeyChecking=no /tmp/lb-web/deployment.yaml devops@192.168.30.32:/tmp/lb-web/deployment.yaml
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
