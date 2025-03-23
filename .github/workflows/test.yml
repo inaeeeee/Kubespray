@@ -34,7 +34,7 @@ jobs:
           echo "🔍 Fetching lb-web deployment information from PostgreSQL via HAProxy (Slave)..."
 
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
-            "SELECT name, deploy_script FROM servicetemplate WHERE name = 'lb-web';")
+            "SELECT name, deploy_script FROM ServiceTemplate WHERE name = 'lb-web';")
 
           if [[ -z "$SERVICE_INFO" ]]; then
             echo "❌ No deployment information found for lb-web!"
@@ -78,14 +78,25 @@ jobs:
 
           echo "✅ VM Information Retrieved: $POD_INFO"
 
+          # `lb-web`의 `template_id` 가져오기
+          TEMPLATE_ID=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
+            "SELECT id FROM ServiceTemplate WHERE name = 'lb-web';" | xargs)
+
+          if [[ -z "$TEMPLATE_ID" ]]; then
+              echo "❌ ERROR: No matching ServiceTemplate found for 'lb-web'!"
+              exit 1
+          fi
+
+          echo "📌 Found Template ID: $TEMPLATE_ID"
+
           # PostgreSQL Master(5000)에 VM 정보 저장
           while IFS="|" read -r HOSTNAME IP_ADDRESS; do
               if [[ -n "$HOSTNAME" && -n "$IP_ADDRESS" ]]; then
                   echo "📌 Storing VM: $HOSTNAME ($IP_ADDRESS) in PostgreSQL"
 
                   psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -c \
-                  "INSERT INTO VM (workspace_id, hostname, ip_address, status)
-                   VALUES (1, '$HOSTNAME', '$IP_ADDRESS', 'running')
+                  "INSERT INTO VM (template_id, hostname, ip_address, status, deploy_method)
+                   VALUES ($TEMPLATE_ID, '$HOSTNAME', '$IP_ADDRESS', 'running', 'k8s')
                    ON CONFLICT (hostname) 
                    DO UPDATE SET ip_address = EXCLUDED.ip_address, status = 'running';"
               fi
