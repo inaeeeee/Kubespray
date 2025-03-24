@@ -1,4 +1,4 @@
-name: Deploy monitoring on External K8s Server
+name: Deploy monitoring on External K8s Server (Local with SSH)
 
 on:
   workflow_dispatch:
@@ -52,25 +52,11 @@ jobs:
           echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
 
-      - name: 📂 Prepare monitoring files from PostgreSQL Server
-        run: |
-          echo "📥 Copying monitoring files from PostgreSQL server to GitHub Runner..."
-          mkdir -p /tmp/monitoring/yaml
-
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh /tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml /tmp/monitoring/yaml/
-
-          if [ ! -f /tmp/monitoring/deploy.sh ]; then
-            echo "❌ ERROR: deploy.sh was not copied!"
-            exit 1
-          fi
-
-      
       - name: Copy Deployment Files to Kubernetes Master Server
         run: |
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/yaml/
+          scp -o StrictHostKeyChecking=no /var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
+          scp -o StrictHostKeyChecking=no /var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
@@ -81,18 +67,16 @@ jobs:
         run: |
           echo "🗄 Fetching VM Information from Kubernetes Master and Storing in PostgreSQL..."
 
-          # Kubernetes Master에서 실행하여 VM 정보를 가져오기
           POD_INFO=$(ssh -o StrictHostKeyChecking=no devops@192.168.30.32 \
-            "kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{\"|\"}{.status.podIP}{\"\n\"}{end}'" | tr -d '\r')
+            "kubectl get pods -n monitoring -o jsonpath='{range .items[*]}{.metadata.name}{\"|\"}{.status.podIP}{\"\n\"}{end}'" | tr -d '\r')
 
           if [[ -z "$POD_INFO" ]]; then
-              echo "❌ ERROR: No running pods found!"
+              echo "❌ ERROR: No running pods found in monitoring namespace!"
               exit 1
           fi
 
           echo "✅ VM Information Retrieved: $POD_INFO"
 
-          # `monitoring`의 `template_id` 가져오기
           TEMPLATE_ID=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
             "SELECT id FROM ServiceTemplate WHERE name = 'monitoring';" | xargs)
 
@@ -103,7 +87,6 @@ jobs:
 
           echo "📌 Found Template ID: $TEMPLATE_ID"
 
-          # PostgreSQL Master(5000)에 VM 정보 저장
           while IFS="|" read -r HOSTNAME IP_ADDRESS; do
               if [[ -n "$HOSTNAME" && -n "$IP_ADDRESS" ]]; then
                   echo "📌 Storing VM: $HOSTNAME ($IP_ADDRESS) in PostgreSQL"
