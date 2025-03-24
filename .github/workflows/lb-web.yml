@@ -52,20 +52,15 @@ jobs:
           echo "🔧 Ensuring correct permissions for /tmp/lb-web on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/lb-web && sudo chown -R devops:devops /tmp/lb-web"
 
-      - name: Copy Deployment Files from DB Server to Kubernetes Master Server
+      - name: Copy Deployment Files to Kubernetes Master Server
         run: |
-          echo "🚀 Copying lb-web files from DB Server (192.168.60.64) to Kubernetes Master (192.168.30.32)..."
-
-          # DB 서버에서 마운트된 경로에서 파일 복사
-          ssh -o StrictHostKeyChecking=no root@192.168.60.64 "mkdir -p /tmp/lb-web && cp -r /var/lib/pgsql/data/service_templates/lb_web/scripts /tmp/lb-web/ && cp -r /var/lib/pgsql/data/service_templates/lb_web/yaml /tmp/lb-web/ && chmod -R 755 /tmp/lb-web"
-
-          # 복사된 파일을 Kubernetes 마스터 서버로 이동
-          scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/lb-web/scripts/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/lb-web/yaml/*.yaml devops@192.168.30.32:/tmp/lb-web/yaml/
+          echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
+          scp -o StrictHostKeyChecking=no /tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no /tmp/lb-web/deployment.yaml devops@192.168.30.32:/tmp/lb-web/deployment.yaml
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
-          echo "🚀 Executing lb-web deploy script on Kubernetes master server (192.168.30.32)..."
+          echo "🚀 Executing deployment script on Kubernetes master server (192.168.30.32)..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/lb-web/deploy.sh && /tmp/lb-web/deploy.sh"
 
       - name: Store VM Information in PostgreSQL (Master)
