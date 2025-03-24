@@ -8,7 +8,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Install PostgreSQL Client on CentOS
+      - name: 🔧 Install PostgreSQL Client on CentOS
         run: |
           echo "🔧 Checking if PostgreSQL Client (psql) is installed..."
           if ! command -v psql &> /dev/null
@@ -19,64 +19,20 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
-      - name: Setup PostgreSQL Authentication (Avoid Password Prompts)
+      - name: 🔑 Setup PostgreSQL Authentication (Avoid Password Prompts)
         run: |
           echo "🔧 Configuring PostgreSQL authentication..."
           echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass
           echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass
           chmod 600 ~/.pgpass
 
-      - name: Checkout Repository
+      - name: 📦 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 📂 Copy lb-web files from NAS (192.168.60.64) to Master Server
+      - name: 📂 Copy lb-web files from DB Server (192.168.60.64) to Master Server
         run: |
-          echo "📥 Copying lb-web files from NAS (192.168.60.64) to Master Server..."
-          ssh -o StrictHostKeyChecking=no postgres@192.168.60.64 "sudo mkdir -p /tmp/lb-web && sudo cp -r /var/lib/pgsql/data/service_templates/lb-web/* /tmp/lb-web/ && sudo chmod -R 755 /tmp/lb-web"
+          echo "📥 Copying lb-web files from DB Server (192.168.60.64) to Master Server..."
+          
+          ssh -o StrictHostKeyChecking=no devops@192.168.60.64 "sudo mkdir -p /tmp/lb-web && sudo cp -r /var/lib/pgsql/data/service_templates/lb_web/scripts /tmp/lb-web/ && sudo cp -r /var/lib/pgsql/data/service_templates/lb_web/yaml /tmp/lb-web/ && sudo chmod -R 755 /tmp/lb-web"
 
-          echo "🚀 Copying lb-web deploy script and YAMLs to Kubernetes Master (192.168.30.32)..."
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.64:/tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.64:/tmp/lb-web/yaml/*.yaml devops@192.168.30.32:/tmp/lb-web/yaml/
-
-      - name: 🚀 Execute Deploy Script on Kubernetes Master Server
-        run: |
-          echo "🚀 Executing lb-web deploy script on Kubernetes master..."
-          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/lb-web/deploy.sh && /tmp/lb-web/deploy.sh"
-
-      - name: 🗄 Store VM Information in PostgreSQL (Master)
-        run: |
-          echo "🗄 Fetching VM Information from Kubernetes Master and Storing in PostgreSQL..."
-
-          POD_INFO=$(ssh -o StrictHostKeyChecking=no devops@192.168.30.32 \
-            "kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{\"|\"}{.status.podIP}{\"\n\"}{end}'" | tr -d '\r')
-
-          if [[ -z "$POD_INFO" ]]; then
-              echo "❌ ERROR: No running pods found!"
-              exit 1
-          fi
-
-          echo "✅ VM Information Retrieved: $POD_INFO"
-
-          TEMPLATE_ID=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
-            "SELECT id FROM ServiceTemplate WHERE name = 'lb-web';" | xargs)
-
-          if [[ -z "$TEMPLATE_ID" ]]; then
-              echo "❌ ERROR: No matching ServiceTemplate found for 'lb-web'!"
-              exit 1
-          fi
-
-          echo "📌 Found Template ID: $TEMPLATE_ID"
-
-          while IFS="|" read -r HOSTNAME IP_ADDRESS; do
-              if [[ -n "$HOSTNAME" && -n "$IP_ADDRESS" ]]; then
-                  echo "📌 Storing VM: $HOSTNAME ($IP_ADDRESS) in PostgreSQL"
-
-                  psql -h 192.168.60.67 -p 5000 -U postgres -d solmakasedb -c \
-                  "INSERT INTO VM (template_id, hostname, ip_address, status, deploy_method)
-                   VALUES ($TEMPLATE_ID, '$HOSTNAME', '$IP_ADDRESS', 'running', 'k8s')
-                   ON CONFLICT (hostname) 
-                   DO UPDATE SET ip_address = EXCLUDED.ip_address, status = 'running';"
-              fi
-          done <<< "$POD_INFO"
-
-          echo "✅ VM Information Successfully Stored in PostgreSQL"
+          echo "🚀 Copying lb-web deploy script and YAMLs to Kubernetes
