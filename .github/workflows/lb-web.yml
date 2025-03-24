@@ -31,8 +31,15 @@ jobs:
 
       - name: 📂 Copy lb-web files from DB Server (192.168.60.64) to Master Server
         run: |
-          echo "📥 Copying lb-web files from DB Server (192.168.60.64) to Master Server..."
-          
+          echo \"📥 Copying lb-web files from DB Server (192.168.60.64) to Master Server...\"
+
           ssh -o StrictHostKeyChecking=no devops@192.168.60.64 "sudo mkdir -p /tmp/lb-web && sudo cp -r /var/lib/pgsql/data/service_templates/lb_web/scripts /tmp/lb-web/ && sudo cp -r /var/lib/pgsql/data/service_templates/lb_web/yaml /tmp/lb-web/ && sudo chmod -R 755 /tmp/lb-web"
 
-          echo "🚀 Copying lb-web deploy script and YAMLs to Kubernetes
+          echo \"🚀 Copying lb-web deploy script and YAMLs to Kubernetes Master (192.168.30.32)...\"
+          scp -o StrictHostKeyChecking=no devops@192.168.60.64:/tmp/lb-web/scripts/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no devops@192.168.60.64:/tmp/lb-web/yaml/*.yaml devops@192.168.30.32:/tmp/lb-web/yaml/
+
+      - name: 🚀 Execute Deploy Script on Kubernetes Master Server
+        run: |
+          echo \"🚀 Executing lb-web deploy script on Kubernetes master...\"
+          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/lb-web/deploy.sh && /tmp/lb-web/deploy.sh"
