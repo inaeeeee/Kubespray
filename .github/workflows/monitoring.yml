@@ -8,7 +8,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Install PostgreSQL Client on CentOS
+      - name: 🔧 Install PostgreSQL Client on CentOS
         run: |
           echo "🔧 Checking if PostgreSQL Client (psql) is installed..."
           if ! command -v psql &> /dev/null
@@ -19,17 +19,25 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
-      - name: Setup PostgreSQL Authentication (Avoid Password Prompts)
+      - name: 🔑 Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan 192.168.60.67 >> ~/.ssh/known_hosts
+          ssh-keyscan 192.168.30.32 >> ~/.ssh/known_hosts
+
+      - name: 🧾 Setup PostgreSQL Authentication
         run: |
           echo "🔧 Configuring PostgreSQL authentication..."
-          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass  # Slave (SELECT)
-          echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass  # Master (INSERT, UPDATE)
+          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass  # Slave
+          echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass  # Master
           chmod 600 ~/.pgpass
 
-      - name: Checkout Repository
+      - name: 📦 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Fetch Monitoring Deployment Info from PostgreSQL
+      - name: 🔍 Fetch Monitoring Deployment Info from DB
         run: |
           echo "🔍 Fetching monitoring deployment script from DB..."
 
@@ -42,28 +50,34 @@ jobs:
           fi
 
           echo "✅ Found monitoring service info: $SERVICE_INFO"
-
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
-
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-      - name: Fix Permissions on Kubernetes Master Server
+      - name: 📥 Copy Monitoring Files from PostgreSQL Server to Runner
         run: |
-          echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
+          echo "📥 Copying monitoring deploy script and YAML files from PostgreSQL server..."
+          mkdir -p /tmp/monitoring/yaml
+
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh /tmp/monitoring/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml /tmp/monitoring/yaml/
+
+      - name: 🔧 Prepare Monitoring Folder on Kubernetes Master
+        run: |
+          echo "🔧 Preparing /tmp/monitoring on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
 
-      - name: Copy Monitoring Files to Kubernetes Master Server
+      - name: 🚀 Copy Monitoring Files to Kubernetes Master
         run: |
-          echo "🚀 Copying monitoring script and YAML to Kubernetes master server..."
+          echo "🚀 Copying monitoring files to Kubernetes master server..."
           scp -o StrictHostKeyChecking=no /tmp/monitoring/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
           scp -o StrictHostKeyChecking=no /tmp/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/yaml/
 
-      - name: Execute Monitoring Deploy Script on Kubernetes Master Server
+      - name: 🛠 Execute Monitoring Deploy Script on Master
         run: |
           echo "🚀 Executing monitoring deploy script on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/monitoring/deploy.sh && /tmp/monitoring/deploy.sh"
 
-      - name: Store Monitoring Pod Info in PostgreSQL (Master)
+      - name: 🗄 Store Monitoring Pod Info in PostgreSQL (Master)
         run: |
           echo "🗄 Fetching monitoring pod info and storing in DB..."
 
