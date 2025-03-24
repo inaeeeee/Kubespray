@@ -29,7 +29,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Fetch lb-web Deployment Info from PostgreSQL via HAProxy (Slave)
+      - name: Fetch monitoring Deployment Info from PostgreSQL via HAProxy (Slave)
         run: |
           echo "🔍 Fetching monitoring deployment information from PostgreSQL via HAProxy (Slave)..."
 
@@ -52,6 +52,20 @@ jobs:
           echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
 
+      - name: 📂 Prepare monitoring files from PostgreSQL Server
+        run: |
+          echo "📥 Copying monitoring files from PostgreSQL server to GitHub Runner..."
+          mkdir -p /tmp/monitoring/yaml
+
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh /tmp/monitoring/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml /tmp/monitoring/yaml/
+
+          if [ ! -f /tmp/monitoring/deploy.sh ]; then
+            echo "❌ ERROR: deploy.sh was not copied!"
+            exit 1
+          fi
+
+      
       - name: Copy Deployment Files to Kubernetes Master Server
         run: |
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
