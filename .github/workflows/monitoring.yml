@@ -8,7 +8,7 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: 🔧 Install PostgreSQL Client on CentOS
+      - name: Install PostgreSQL Client on CentOS
         run: |
           echo "🔧 Checking if PostgreSQL Client (psql) is installed..."
           if ! command -v psql &> /dev/null
@@ -19,17 +19,17 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
-      - name: 🔧 Setup PostgreSQL Authentication (Avoid Password Prompts)
+      - name: Setup PostgreSQL Authentication (Avoid Password Prompts)
         run: |
           echo "🔧 Configuring PostgreSQL authentication..."
           echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass  # Slave (SELECT)
           echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass  # Master (INSERT, UPDATE)
           chmod 600 ~/.pgpass
 
-      - name: 📦 Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 🔍 Fetch Monitoring Deployment Info from PostgreSQL
+      - name: Fetch Monitoring Deployment Info from PostgreSQL
         run: |
           echo "🔍 Fetching monitoring deployment script from DB..."
 
@@ -47,45 +47,22 @@ jobs:
 
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
 
-      - name: 🧪 Debug – List Files from PostgreSQL Server
-        run: |
-          echo "📂 Listing files on PostgreSQL server..."
-          ssh -o StrictHostKeyChecking=no postgres@192.168.60.67 "ls -l /var/lib/pgsql/data/service_templates/monitoring/scripts/"
-          ssh -o StrictHostKeyChecking=no postgres@192.168.60.67 "ls -l /var/lib/pgsql/data/service_templates/monitoring/yaml/"
-
-      - name: 📥 Copy Monitoring Files from PostgreSQL Server to Runner
-        run: |
-          set -e
-          echo "📥 Copying monitoring deploy script and YAML files from PostgreSQL server..."
-          mkdir -p /tmp/monitoring/yaml
-
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh /tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml /tmp/monitoring/yaml/
-
-          echo "🔍 Checking if deploy.sh exists..."
-          if [ ! -f /tmp/monitoring/deploy.sh ]; then
-            echo "❌ ERROR: deploy.sh does not exist after copy!"
-            exit 1
-          fi
-          echo "✅ deploy.sh successfully copied."
-
-      - name: 🔧 Fix Permissions on Kubernetes Master Server
+      - name: Fix Permissions on Kubernetes Master Server
         run: |
           echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
 
-      - name: 🚀 Copy Monitoring Files to Kubernetes Master Server
+      - name: Copy Monitoring Files to Kubernetes Master Server
         run: |
           echo "🚀 Copying monitoring script and YAML to Kubernetes master server..."
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/yaml/
-
-      - name: 🛠 Execute Monitoring Deploy Script on Kubernetes Master Server
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh /tmp/monitoring/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml /tmp/monitoring/yaml/
+      - name: Execute Monitoring Deploy Script on Kubernetes Master Server
         run: |
           echo "🚀 Executing monitoring deploy script on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "chmod +x /tmp/monitoring/deploy.sh && /tmp/monitoring/deploy.sh"
 
-      - name: 🗄 Store Monitoring Pod Info in PostgreSQL (Master)
+      - name: Store Monitoring Pod Info in PostgreSQL (Master)
         run: |
           echo "🗄 Fetching monitoring pod info and storing in DB..."
 
