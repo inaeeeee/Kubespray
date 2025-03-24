@@ -51,13 +51,13 @@ jobs:
         run: |
           echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
           ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
-
+      
       - name: Copy Deployment Files to Kubernetes Master Server
         run: |
           echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
-          scp -o StrictHostKeyChecking=no /var/lib/pgsql/data/service_templates/monitoring/scripts/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no /var/lib/pgsql/data/service_templates/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/
-
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no service_templates/monitoring/scripts/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no service_templates/monitoring/yaml/*.yaml devops@192.168.30.32:/tmp/monitoring/
+    
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
           echo "🚀 Executing deployment script on Kubernetes master server (192.168.30.32)..."
