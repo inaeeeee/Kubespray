@@ -19,6 +19,12 @@ jobs:
             echo "✅ PostgreSQL Client is already installed."
           fi
 
+      - name: 🔑 Setup PostgreSQL Authentication (Avoid Password Prompts)
+        run: |
+          echo "192.168.60.67:5001:*:postgres:qaz123" > ~/.pgpass
+          echo "192.168.60.67:5000:*:postgres:qaz123" >> ~/.pgpass
+          chmod 600 ~/.pgpass
+
       - name: 🔑 Setup SSH Authentication
         run: |
           eval "$(ssh-agent -s)"
