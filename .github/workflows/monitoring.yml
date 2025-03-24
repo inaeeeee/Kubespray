@@ -49,19 +49,19 @@ jobs:
           echo "🚀 Copying monitoring files from DB Server (192.168.60.64) to /tmp/monitoring/..."
 
           # DB 서버에서 `/tmp/monitoring/`으로 최신 파일 복사
-          ssh -o StrictHostKeyChecking=no root@192.168.60.64 "mkdir -p /tmp/monitoring && cp -r /var/lib/pgsql/data/service_templates/monitoring/* /tmp/monitoring/"
+          ssh -o StrictHostKeyChecking=no root@192.168.60.64 "mkdir -p /tmp/monitoring/yaml && cp -r /var/lib/pgsql/data/service_templates/monitoring/* /tmp/monitoring/"
 
       - name: Fix Permissions on Kubernetes Master Server
         run: |
           echo "🔧 Ensuring correct permissions for /tmp/monitoring on Kubernetes master server..."
-          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring && sudo chown -R devops:devops /tmp/monitoring"
+          ssh -o StrictHostKeyChecking=no devops@192.168.30.32 "sudo mkdir -p /tmp/monitoring/yaml && sudo chown -R devops:devops /tmp/monitoring"
 
       - name: Copy Deployment Files to Kubernetes Master Server
         run: |
           echo "🚀 Copying monitoring files from /tmp/monitoring/ on DB Server to Kubernetes Master (192.168.30.32)..."
 
           scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/monitoring/scripts/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/monitoring/yaml/* devops@192.168.30.32:/tmp/monitoring/yaml/
+          scp -r -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/monitoring/yaml/. devops@192.168.30.32:/tmp/monitoring/yaml/
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
