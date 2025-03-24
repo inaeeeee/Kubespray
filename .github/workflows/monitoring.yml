@@ -32,7 +32,6 @@ jobs:
       - name: Fetch monitoring Deployment Info from PostgreSQL via HAProxy (Slave)
         run: |
           echo "🔍 Fetching monitoring deployment information from PostgreSQL via HAProxy (Slave)..."
-
           SERVICE_INFO=$(psql -h 192.168.60.67 -p 5001 -U postgres -d solmakasedb -t -w -c \
             "SELECT name, deploy_script FROM ServiceTemplate WHERE name = 'monitoring';")
 
@@ -42,10 +41,15 @@ jobs:
           fi
 
           echo "✅ Found monitoring service info: $SERVICE_INFO"
-
           DEPLOY_SCRIPT=$(echo "$SERVICE_INFO" | awk -F '|' '{print $2}' | xargs)
-
           echo "📌 Deploy Script Path: $DEPLOY_SCRIPT"
+
+      - name: Copy Deployment Files from DB Server to tmp before transferring to Kubernetes Master
+        run: |
+          echo "🚀 Copying monitoring files from DB Server (192.168.60.64) to /tmp/monitoring/..."
+
+          # DB 서버에서 `/tmp/monitoring/`으로 최신 파일 복사
+          ssh -o StrictHostKeyChecking=no root@192.168.60.64 "mkdir -p /tmp/monitoring && cp -r /var/lib/pgsql/data/service_templates/monitoring/* /tmp/monitoring/"
 
       - name: Fix Permissions on Kubernetes Master Server
         run: |
@@ -54,9 +58,10 @@ jobs:
 
       - name: Copy Deployment Files to Kubernetes Master Server
         run: |
-          echo "🚀 Copying deployment script and YAML to Kubernetes master server (192.168.30.32)..."
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
-          scp -o StrictHostKeyChecking=no /tmp/monitoring/*.yaml devops@192.168.30.32:/tmp/monitoring/
+          echo "🚀 Copying monitoring files from /tmp/monitoring/ on DB Server to Kubernetes Master (192.168.30.32)..."
+
+          scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/monitoring/scripts/deploy.sh devops@192.168.30.32:/tmp/monitoring/deploy.sh
+          scp -o StrictHostKeyChecking=no root@192.168.60.64:/tmp/monitoring/yaml/* devops@192.168.30.32:/tmp/monitoring/yaml/
 
       - name: Execute Deploy Script on Kubernetes Master Server
         run: |
