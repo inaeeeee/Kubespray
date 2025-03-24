@@ -29,14 +29,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: 📂 Copy lb-web files from NAS to Master Server
+      - name: 📂 Copy lb-web files from NAS (192.168.60.64) to Master Server
         run: |
-          echo "📥 Copying lb-web files from NAS to Master Server..."
-          ssh -o StrictHostKeyChecking=no postgres@192.168.60.67 "sudo mkdir -p /tmp/lb-web && sudo cp -r /var/lib/pgsql/data/service_templates/lb-web/* /tmp/lb-web/ && sudo chmod -R 755 /tmp/lb-web"
+          echo "📥 Copying lb-web files from NAS (192.168.60.64) to Master Server..."
+          ssh -o StrictHostKeyChecking=no postgres@192.168.60.64 "sudo mkdir -p /tmp/lb-web && sudo cp -r /var/lib/pgsql/data/service_templates/lb-web/* /tmp/lb-web/ && sudo chmod -R 755 /tmp/lb-web"
 
           echo "🚀 Copying lb-web deploy script and YAMLs to Kubernetes Master (192.168.30.32)..."
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
-          scp -o StrictHostKeyChecking=no postgres@192.168.60.67:/tmp/lb-web/yaml/*.yaml devops@192.168.30.32:/tmp/lb-web/yaml/
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.64:/tmp/lb-web/deploy.sh devops@192.168.30.32:/tmp/lb-web/deploy.sh
+          scp -o StrictHostKeyChecking=no postgres@192.168.60.64:/tmp/lb-web/yaml/*.yaml devops@192.168.30.32:/tmp/lb-web/yaml/
 
       - name: 🚀 Execute Deploy Script on Kubernetes Master Server
         run: |
